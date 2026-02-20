@@ -22,6 +22,21 @@ enum ListingStatus {
   DELETED
 }
 
+model Fuel {
+  fKeyNo   String @id   // "101" ~ "111"
+  fuelName String
+
+  listings Listing[]
+}
+
+model Mission {
+  mKeyNo      String @id  // "1" ~ "4"
+  missionName String
+
+  listings Listing[]
+}
+
+
 /**
  * 1) 차종 사전(카매니저 동일)
  * MakerNo -> ModelNo -> MDetailNo -> GradeNo -> GDetailNo
@@ -112,23 +127,25 @@ model Listing {
   source          String
   sourceListingId String @unique
 
-  // 같은 차 묶기(최신만 남김): 추천은 차량번호(oldCarNo) / 있으면 VIN(frameNo)
   vehicleKey String
 
   complexId Int?
   complex   Complex? @relation(fields: [complexId], references: [id])
 
-  // 카매니저 트리 최종 연결(세부등급까지 확정되면 여기로)
   gDetailNo   String?
   gradeDetail CarGradeDetail? @relation(fields: [gDetailNo], references: [gDetailNo])
 
-  // 검색용 스펙(원본에서 내려오는 형태 맞춰서)
-  yymm         String? // "2021" 같은 연식(원본 키가 yymm)
-  fuel         String? // gas 또는 fuel
-  transmission String? // autoGbn
-  color        String?
-  km           Int?
-  price        Int?
+  yymm String?
+
+  fuelKey         String?
+  fuel            Fuel?    @relation(fields: [fuelKey], references: [fKeyNo])
+
+  missionKey      String?
+  transmission    Mission? @relation(fields: [missionKey], references: [mKeyNo])
+  
+  color String?
+  km    Int?
+  price Int?
 
   status        ListingStatus @default(ACTIVE)
   firstSeenAt   DateTime      @default(now())
@@ -136,7 +153,6 @@ model Listing {
   soldPendingAt DateTime?
   deletedAt     DateTime?
 
-  // 프론트 표기 캐시(원하면)
   displayTitle String?
 
   mySale MySale?
@@ -146,6 +162,8 @@ model Listing {
 
   @@index([vehicleKey])
   @@index([status, lastSeenAt])
+  @@index([fuelKey])
+  @@index([missionKey])
 }
 
 model MySale {
