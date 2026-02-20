@@ -1,0 +1,159 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+// 판매상태 (순서대로 판매중, 솔드아웃 대기 중, 나의 판매완료처리, 완전삭제)
+enum ListingStatus {
+  ACTIVE
+  SOLD_PENDING_DELETE
+  SOLD_CONFIRMED
+  DELETED
+}
+
+/**
+ * 1) 차종 사전(카매니저 동일)
+ * MakerNo -> ModelNo -> MDetailNo -> GradeNo -> GDetailNo
+ */
+
+model CarMaker {
+  // Bizjs.GetMakerBase()의 MakerNo
+  makerNo   String @id
+  makerName String
+
+  models CarModel[]
+}
+
+model CarModel {
+  // Bizjs.GetModelBase(makerNo)의 ModelNo
+  modelNo   String @id
+  makerNo   String
+  modelName String
+
+  maker   CarMaker         @relation(fields: [makerNo], references: [makerNo])
+  details CarModelDetail[]
+
+  @@index([makerNo])
+}
+
+model CarModelDetail {
+  // Bizjs.GetModelDetailBase(modelNo)의 MDetailNo
+  mDetailNo   String @id
+  modelNo     String
+  mDetailName String
+
+  model  CarModel   @relation(fields: [modelNo], references: [modelNo])
+  grades CarGrade[]
+
+  @@index([modelNo])
+}
+
+model CarGrade {
+  // Bizjs.GetGradeBase(mDetailNo)의 GradeNo
+  gradeNo   String  @id
+  mDetailNo String
+  gradeCode String?
+  // (원본에 텍스트가 있으면 저장, 없으면 null)
+  gradeName String?
+
+  modelDetail  CarModelDetail   @relation(fields: [mDetailNo], references: [mDetailNo])
+  gradeDetails CarGradeDetail[]
+
+  @@index([mDetailNo])
+}
+
+model CarGradeDetail {
+  // Bizjs.GetGradeDetailBase(gradeNo)의 GDetailNo
+  gDetailNo   String @id
+  gradeNo     String
+  gDetailName String
+
+  grade    CarGrade  @relation(fields: [gradeNo], references: [gradeNo])
+  listings Listing[]
+
+  @@index([gradeNo])
+}
+
+/**
+ * 2) 단지/지역 (엠파크허브,타워,랜드만 먼저)
+ * 카매니저가 코드로 주면 나중에 sidoCode/sigunguCode/complexCode 추가하면 됨
+ */
+model Complex {
+  id          Int     @id @default(autoincrement())
+  sido        String?
+  sigungu     String?
+  complexName String // "엠파크허브"
+
+  listings Listing[]
+
+  @@index([complexName])
+}
+
+/**
+ * 3) 매물(크롤링 붙일 테이블)
+ * - sourceListingId: 목록에서 나온 토큰(예: PGEXsAXR...)
+ * - vehicleKey: 차량번호(또는 VIN). "최신만 남김" 그룹키
+ * - 3일 유예 삭제 + 내가 판매한 건 SOLD_CONFIRMED/MySale로 보존
+ */
+model Listing {
+  id Int @id @default(autoincrement())
+
+  source          String
+  sourceListingId String @unique
+
+  // 같은 차 묶기(최신만 남김): 추천은 차량번호(oldCarNo) / 있으면 VIN(frameNo)
+  vehicleKey String
+
+  complexId Int?
+  complex   Complex? @relation(fields: [complexId], references: [id])
+
+  // 카매니저 트리 최종 연결(세부등급까지 확정되면 여기로)
+  gDetailNo   String?
+  gradeDetail CarGradeDetail? @relation(fields: [gDetailNo], references: [gDetailNo])
+
+  // 검색용 스펙(원본에서 내려오는 형태 맞춰서)
+  yymm         String? // "2021" 같은 연식(원본 키가 yymm)
+  fuel         String? // gas 또는 fuel
+  transmission String? // autoGbn
+  color        String?
+  km           Int?
+  price        Int?
+
+  status        ListingStatus @default(ACTIVE)
+  firstSeenAt   DateTime      @default(now())
+  lastSeenAt    DateTime      @default(now())
+  soldPendingAt DateTime?
+  deletedAt     DateTime?
+
+  // 프론트 표기 캐시(원하면)
+  displayTitle String?
+
+  mySale MySale?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vehicleKey])
+  @@index([status, lastSeenAt])
+}
+
+model MySale {
+  id        Int     @id @default(autoincrement())
+  listingId Int     @unique
+  listing   Listing @relation(fields: [listingId], references: [id])
+
+  soldAt    DateTime @default(now())
+  soldPrice Int?
+  memo      String?
+}
