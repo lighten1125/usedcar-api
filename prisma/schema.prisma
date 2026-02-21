@@ -112,14 +112,10 @@ model CarGradeDetail {
  * 카매니저가 코드로 주면 나중에 sidoCode/sigunguCode/complexCode 추가하면 됨
  */
 model Complex {
-  id          Int     @id @default(autoincrement())
-  sido        String?
-  sigungu     String?
-  complexName String // "엠파크허브"
+  danjiNo   String @id      // "96503"
+  danjiName String          // "엠파크허브"
 
   listings Listing[]
-
-  @@index([complexName])
 }
 
 /**
@@ -145,8 +141,8 @@ model Listing {
   vehicleKey String
 
   // 매매단지
-  complexId Int?
-  complex   Complex? @relation(fields: [complexId], references: [id])
+  complexId String?
+  complex   Complex? @relation(fields: [complexId], references: [danjiNo])
 
   //차량 상세정보
   gDetailNo   String?
