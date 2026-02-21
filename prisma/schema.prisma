@@ -37,6 +37,13 @@ model Mission {
 }
 
 
+model Color {
+  cKeyNo     String @id   // "101" ~ ...
+  colorName  String
+
+  listings   Listing[]
+}
+
 /**
  * 1) 차종 사전(카매니저 동일)
  * MakerNo -> ModelNo -> MDetailNo -> GradeNo -> GDetailNo
@@ -124,27 +131,46 @@ model Complex {
 model Listing {
   id Int @id @default(autoincrement())
 
+  // 카매니저 소스
   source          String
   sourceListingId String @unique
 
+  // 차량 식별 원본
+  plateNo String? // 예: "187로9409"
+  vin     String? // 예: "KMHG341DDMU089572" (없을 수 있음)
+
+  // 같은 차 “대표키” (수집 로직이 채움)
+  // vin 있으면:  "VIN:xxxxx"
+  // 없으면:      "PLATE:xxxxx"
   vehicleKey String
 
+  // 매매단지
   complexId Int?
   complex   Complex? @relation(fields: [complexId], references: [id])
 
+  //차량 상세정보
   gDetailNo   String?
   gradeDetail CarGradeDetail? @relation(fields: [gDetailNo], references: [gDetailNo])
 
+  //연식(년월)
   yymm String?
 
+  //연료
   fuelKey         String?
   fuel            Fuel?    @relation(fields: [fuelKey], references: [fKeyNo])
 
+  //변속기
   missionKey      String?
-  transmission    Mission? @relation(fields: [missionKey], references: [mKeyNo])
+  mission    Mission? @relation(fields: [missionKey], references: [mKeyNo])
   
-  color String?
+  //컬러
+  colorKey String?
+  color    Color? @relation(fields: [colorKey], references: [cKeyNo])
+
+  //주행거리  
   km    Int?
+
+  //가격
   price Int?
 
   status        ListingStatus @default(ACTIVE)
@@ -160,10 +186,17 @@ model Listing {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([vehicleKey])
-  @@index([status, lastSeenAt])
-  @@index([fuelKey])
-  @@index([missionKey])
+@@index([vehicleKey])             // 동일 차량 묶기
+@@index([plateNo])                // 차번호 검색
+@@index([complexId, status])      // 단지 + 활성 매물 (핵심)
+@@index([fuelKey])
+@@index([missionKey])
+@@index([colorKey])
+@@index([price])
+@@index([yymm])
+@@index([km])
+@@index([status, lastSeenAt])     // 3일 유예 삭제 처리
+
 }
 
 model MySale {
