@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,8 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-// 판매상태 (순서대로 판매중, 솔드아웃 대기 중, 나의 판매완료처리, 완전삭제)
 enum ListingStatus {
   ACTIVE
   SOLD_PENDING_DELETE
@@ -22,152 +14,67 @@ enum ListingStatus {
   DELETED
 }
 
-model Fuel {
-  fKeyNo   String @id   // "101" ~ "111"
-  fuelName String
-
-  listings Listing[]
+enum MpRole {
+  MAKER
+  MODEL
+  MODEL_DETAIL
+  GRADE
+  GRADE_DETAIL
 }
 
-model Mission {
-  mKeyNo      String @id  // "1" ~ "4"
-  missionName String
+model MpNode {
+  code String @id
 
-  listings Listing[]
+  role MpRole
+  name String?
+  yearLabel String?
+  releaseYear Int?
+
+  parentCode String?
+  parent     MpNode? @relation("MpNodeParent", fields: [parentCode], references: [code])
+  children   MpNode[] @relation("MpNodeParent")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([parentCode])
 }
 
-
-model Color {
-  cKeyNo     String @id   // "101" ~ ...
-  colorName  String
-
-  listings   Listing[]
-}
-
-/**
- * 1) 차종 사전(카매니저 동일)
- * MakerNo -> ModelNo -> MDetailNo -> GradeNo -> GDetailNo
- */
-
-model CarMaker {
-  // Bizjs.GetMakerBase()의 MakerNo
-  makerNo   String @id
-  makerName String
-
-  models CarModel[]
-}
-
-model CarModel {
-  // Bizjs.GetModelBase(makerNo)의 ModelNo
-  modelNo   String @id
-  makerNo   String
-  modelName String
-
-  maker   CarMaker         @relation(fields: [makerNo], references: [makerNo])
-  details CarModelDetail[]
-
-  @@index([makerNo])
-}
-
-model CarModelDetail {
-  // Bizjs.GetModelDetailBase(modelNo)의 MDetailNo
-  mDetailNo   String @id
-  modelNo     String
-  mDetailName String
-
-  model  CarModel   @relation(fields: [modelNo], references: [modelNo])
-  grades CarGrade[]
-
-  @@index([modelNo])
-}
-
-model CarGrade {
-  // Bizjs.GetGradeBase(mDetailNo)의 GradeNo
-  gradeNo   String  @id
-  mDetailNo String
-  gradeCode String?
-  // (원본에 텍스트가 있으면 저장, 없으면 null)
-  gradeName String?
-
-  modelDetail  CarModelDetail   @relation(fields: [mDetailNo], references: [mDetailNo])
-  gradeDetails CarGradeDetail[]
-
-  @@index([mDetailNo])
-}
-
-model CarGradeDetail {
-  // Bizjs.GetGradeDetailBase(gradeNo)의 GDetailNo
-  gDetailNo   String @id
-  gradeNo     String
-  gDetailName String
-
-  grade    CarGrade  @relation(fields: [gradeNo], references: [gradeNo])
-  listings Listing[]
-
-  @@index([gradeNo])
-}
-
-/**
- * 2) 단지/지역 (엠파크허브,타워,랜드만 먼저)
- * 카매니저가 코드로 주면 나중에 sidoCode/sigunguCode/complexCode 추가하면 됨
- */
-model Complex {
-  danjiNo   String @id      // "96503"
-  danjiName String          // "엠파크허브"
-
-  listings Listing[]
-}
-
-/**
- * 3) 매물(크롤링 붙일 테이블)
- * - sourceListingId: 목록에서 나온 토큰(예: PGEXsAXR...)
- * - vehicleKey: 차량번호(또는 VIN). "최신만 남김" 그룹키
- * - 3일 유예 삭제 + 내가 판매한 건 SOLD_CONFIRMED/MySale로 보존
- */
 model Listing {
   id Int @id @default(autoincrement())
 
-  // 카매니저 소스
-  source          String
-  sourceListingId String @unique
+  source          String  @default("MPARK")
+  sourceListingId String  @unique
 
-  // 차량 식별 원본
-  plateNo String? // 예: "187로9409"
-  vin     String? // 예: "KMHG341DDMU089572" (없을 수 있음)
+  makerCode       String
+  modelCode       String
+  modelDetailCode String
+  gradeCode       String?
+  gradeDetailCode String?
 
-  // 같은 차 “대표키” (수집 로직이 채움)
-  // vin 있으면:  "VIN:xxxxx"
-  // 없으면:      "PLATE:xxxxx"
-  vehicleKey String
+  // ✅ 표시용 캐시(최소 3개만)
+  modelDetailDisplay  String? // "더 올뉴G80 (20~23년)"
+  gradeDisplay        String? // "2.5T AWD"
+  gradeDetailDisplay  String? // "기본형"
 
-  // 매매단지
-  complexId String?
-  complex   Complex? @relation(fields: [complexId], references: [danjiNo])
+  plateNo    String?
+  vin        String?
+  vehicleKey String?
 
-  //차량 상세정보
-  gDetailNo   String?
-  gradeDetail CarGradeDetail? @relation(fields: [gDetailNo], references: [gDetailNo])
-
-  //연식(년월)
   yymm String?
-
-  //연료
-  fuelKey         String?
-  fuel            Fuel?    @relation(fields: [fuelKey], references: [fKeyNo])
-
-  //변속기
-  missionKey      String?
-  mission    Mission? @relation(fields: [missionKey], references: [mKeyNo])
-  
-  //컬러
-  colorKey String?
-  color    Color? @relation(fields: [colorKey], references: [cKeyNo])
-
-  //주행거리  
-  km    Int?
-
-  //가격
+  km   Int?
   price Int?
+
+  fuelCode         String?
+  transmissionCode String?
+  colorCode        String?
+
+  fuel         MpFuel?         @relation(fields: [fuelCode], references: [code])
+  transmission MpTransmission? @relation(fields: [transmissionCode], references: [code])
+  color        MpColor?        @relation(fields: [colorCode], references: [code])
+
+  url String?
 
   status        ListingStatus @default(ACTIVE)
   firstSeenAt   DateTime      @default(now())
@@ -175,25 +82,50 @@ model Listing {
   soldPendingAt DateTime?
   deletedAt     DateTime?
 
-  displayTitle String?
-
   mySale MySale?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-@@index([vehicleKey])             // 동일 차량 묶기
-@@index([plateNo])                // 차번호 검색
-@@index([complexId, status])      // 단지 + 활성 매물 (핵심)
-@@index([fuelKey])
-@@index([missionKey])
-@@index([colorKey])
-@@index([price])
-@@index([yymm])
-@@index([km])
-@@index([status, lastSeenAt])     // 3일 유예 삭제 처리
+  @@index([makerCode])
+  @@index([modelCode])
+  @@index([modelDetailCode])
 
+  @@index([makerCode, modelCode, modelDetailCode])
+  @@index([gradeCode])
+  @@index([gradeDetailCode])
+
+  @@index([fuelCode])
+  @@index([transmissionCode])
+  @@index([colorCode])
+
+  @@index([vehicleKey])
+  @@index([plateNo])
+  @@index([price])
+  @@index([yymm])
+  @@index([km])
+  @@index([status, lastSeenAt])
 }
+
+model MpColor {
+  code    String @id // "006048"
+  name    String
+  rgbCode String?
+  listings Listing[]
+}
+
+model MpFuel {
+  code String @id // "005001"
+  name String
+  listings Listing[]
+}
+
+model MpTransmission {
+  code String @id // "004001"
+  name String
+  listings Listing[]
+}
+
 
 model MySale {
   id        Int     @id @default(autoincrement())
