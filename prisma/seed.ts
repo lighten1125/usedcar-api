@@ -116,7 +116,7 @@ async function seedCarTree() {
     const gradeDetailName = clean(r.gradeDetailName);
     const gradeDetailYearLabel = clean(r.gradeDetailYearLabel);
 
-    if (makerCode) {
+    if (makerCode && !nodeMap.has(makerCode)) {
       nodeMap.set(makerCode, {
         code: makerCode,
         role: "MAKER",
